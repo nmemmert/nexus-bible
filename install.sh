@@ -416,8 +416,8 @@ After=network.target
 Type=simple
 User=$USER
 WorkingDirectory=$INSTALL_DIR
-Environment=NODE_ENV=production
-ExecStart=/usr/bin/npm run server
+Environment=NODE_ENV=development
+ExecStart=/usr/bin/npm run dev:full
 Restart=always
 RestartSec=10
 
