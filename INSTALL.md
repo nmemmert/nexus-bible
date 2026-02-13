@@ -5,20 +5,20 @@
 Once your repository is on GitHub, users can install Nexus Bible with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
 ```
 
 Or with custom configuration:
 
 ```bash
 # Install to custom directory
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | INSTALL_DIR=/opt/nexus-bible bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | INSTALL_DIR=/opt/nexus-bible bash
 
 # Install with PM2 auto-setup
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | SETUP_SERVICE=pm2 bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | SETUP_SERVICE=pm2 bash
 
 # Clone from your fork
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | GIT_REPO=https://github.com/YOUR_USERNAME/nexus-bible.git bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | GIT_REPO=https://github.com/nmemmert/nexus-bible.git bash
 ```
 
 ## Manual Installation
@@ -26,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/inst
 ### 1. Download the Script
 
 ```bash
-wget https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh
+wget https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh
 chmod +x install.sh
 ```
 
@@ -38,7 +38,7 @@ chmod +x install.sh
 
 # Or with environment variables
 INSTALL_DIR=$HOME/my-nexus-bible \
-GIT_REPO=https://github.com/YOUR_USERNAME/nexus-bible.git \
+GIT_REPO=https://github.com/nmemmert/nexus-bible.git \
 SETUP_SERVICE=pm2 \
 ./install.sh
 ```
@@ -242,18 +242,18 @@ To enable one-line install from your GitHub repo:
    ```
 
 2. **Update URLs** in this guide with your username:
-   - Replace `YOUR_USERNAME` with your GitHub username
+   - Replace `nmemmert` with your GitHub username
    - Update in README.md and DEPLOYMENT.md
 
 3. **Test the install**:
    ```bash
    # On a fresh Ubuntu VM/container
-   curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
    ```
 
 4. **Share with users**:
    ```
-   To install: curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+   To install: curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
    ```
 
 ## Advanced Usage
@@ -265,7 +265,7 @@ For automated deployments:
 ```bash
 # Pre-configure all options
 export INSTALL_DIR=/opt/nexus-bible
-export GIT_REPO=https://github.com/YOUR_USERNAME/nexus-bible.git
+export GIT_REPO=https://github.com/nmemmert/nexus-bible.git
 export SETUP_SERVICE=systemd
 export DEBIAN_FRONTEND=noninteractive
 

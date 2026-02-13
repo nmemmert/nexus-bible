@@ -22,7 +22,7 @@ A modern Bible study application for the BSB (Berean Standard Bible) translation
 Install everything automatically:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
 ```
 
 The install script will:

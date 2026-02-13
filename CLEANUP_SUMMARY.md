@@ -45,7 +45,7 @@
 - ✅ Created `test-install.sh` - Test script for installation
 - ✅ One-line install from GitHub ready:
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
   ```
 
 ### 6. Code Quality

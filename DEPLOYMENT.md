@@ -7,7 +7,7 @@
 The fastest way to get started on Ubuntu/Debian:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
 ```
 
 This fully automated script will:

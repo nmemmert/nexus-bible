@@ -35,8 +35,8 @@
 After you push to GitHub, users can install with:
 
 ```bash
-# Replace YOUR_USERNAME with your GitHub username
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+# Replace nmemmert with your GitHub username
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
 ```
 
 **Before this works, you need to:**
@@ -46,14 +46,14 @@ curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/inst
    git init
    git add .
    git commit -m "Add automated install script"
-   git remote add origin https://github.com/YOUR_USERNAME/nexus-bible.git
+   git remote add origin https://github.com/nmemmert/nexus-bible.git
    git push -u origin main
    ```
 
 2. **Update documentation**:
    ```bash
-   # Replace YOUR_USERNAME in these files:
-   sed -i 's/YOUR_USERNAME/your-github-username/g' README.md INSTALL.md DEPLOYMENT.md
+   # Replace nmemmert in these files:
+   sed -i 's/nmemmert/your-github-username/g' README.md INSTALL.md DEPLOYMENT.md
    git add .
    git commit -m "Update GitHub username in docs"
    git push
@@ -86,7 +86,7 @@ Download and customize before running:
 
 ```bash
 # Download script
-wget https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh
+wget https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh
 
 # Review it
 less install.sh
@@ -162,7 +162,7 @@ Control the installation with these variables:
 INSTALL_DIR=/path/to/install
 
 # GitHub repository URL
-GIT_REPO=https://github.com/YOUR_USERNAME/nexus-bible.git
+GIT_REPO=https://github.com/nmemmert/nexus-bible.git
 
 # Service management: none, pm2, systemd
 SETUP_SERVICE=pm2
@@ -381,7 +381,7 @@ sudo npm install -g pm2
 Once on GitHub, share this one-liner:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
 ```
 
 ### For Your README
@@ -394,7 +394,7 @@ Add this to your README.md:
 One command to install everything on Ubuntu/Debian:
 
 \`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
 \`\`\`
 
 See [INSTALL.md](INSTALL.md) for more options.
@@ -423,7 +423,7 @@ The install script:
 ## Next Steps
 
 1. ✅ **Push to GitHub** (see [GITHUB_SETUP.md](GITHUB_SETUP.md))
-2. ✅ **Update YOUR_USERNAME** in all docs
+2. ✅ **Update nmemmert** in all docs
 3. ✅ **Test the install** on a fresh Ubuntu VM
 4. ✅ **Share with users**!
 

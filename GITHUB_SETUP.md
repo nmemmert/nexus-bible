@@ -15,14 +15,14 @@ git add .
 git commit -m "Initial commit - Nexus Bible"
 
 # Create repo on GitHub, then:
-git remote add origin https://github.com/YOUR_USERNAME/nexus-bible.git
+git remote add origin https://github.com/nmemmert/nexus-bible.git
 git branch -M main
 git push -u origin main
 ```
 
 ### 2. Update Install Script URLs
 
-Replace `YOUR_USERNAME` in these files with your actual GitHub username:
+Replace `nmemmert` in these files with your actual GitHub username:
 
 - `README.md` - Line with install command
 - `INSTALL.md` - All install examples
@@ -31,7 +31,7 @@ Replace `YOUR_USERNAME` in these files with your actual GitHub username:
 **Find and replace:**
 ```bash
 # In your editor or with sed:
-sed -i 's/YOUR_USERNAME/your-actual-username/g' README.md INSTALL.md DEPLOYMENT.md
+sed -i 's/nmemmert/your-actual-username/g' README.md INSTALL.md DEPLOYMENT.md
 ```
 
 ### 3. Test the Install Script
@@ -43,7 +43,7 @@ Before sharing, test on a fresh Ubuntu installation:
 ./install.sh
 
 # Test from GitHub (after pushing)
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
 ```
 
 ## Making the Repository Public
@@ -58,7 +58,7 @@ On GitHub:
 After setup, users can install with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
 ```
 
 ## Repository Structure
@@ -151,7 +151,7 @@ git tag -a v1.0.0 -m "First stable release"
 git push origin v1.0.0
 
 # Users can then install specific versions
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/v1.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/v1.0.0/install.sh | bash
 ```
 
 ## Enable GitHub Pages (Optional)
@@ -161,7 +161,7 @@ To host documentation:
 1. Go to Settings → Pages
 2. Source: Deploy from branch `main`
 3. Folder: `/ (root)` or `/docs`
-4. Your README will be visible at: `https://YOUR_USERNAME.github.io/nexus-bible/`
+4. Your README will be visible at: `https://nmemmert.github.io/nexus-bible/`
 
 ## License
 
@@ -241,7 +241,7 @@ Paste relevant logs here.
 ## Quick Install
 
 \`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/nexus-bible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
 \`\`\`
 
 [Full documentation](./README.md) | [Installation Guide](./INSTALL.md) | [Deployment](./DEPLOYMENT.md)
@@ -283,7 +283,7 @@ updates:
 ## Next Steps
 
 1. ✅ Push to GitHub
-2. ✅ Update YOUR_USERNAME in docs
+2. ✅ Update nmemmert in docs
 3. ✅ Test install script
 4. ✅ Make repository public
 5. ✅ Add LICENSE file
