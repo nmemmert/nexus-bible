@@ -80,9 +80,6 @@ check_os() {
         exit 1
     fi
 }
-        exit 1
-    fi
-}
 
 # Check if port is available
 check_port() {
@@ -641,11 +638,7 @@ main() {
     else
         SETUP_SERVICE="none"
         print_info "Skipping service setup (you can run manually later)"
-    fi*)
-            print_warning "Invalid choice, skipping service setup"
-            SETUP_SERVICE="none"
-            ;;
-    esac
+    fi
     
     test_installation
     print_instructions
