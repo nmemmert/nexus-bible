@@ -20,6 +20,7 @@ REQUIRED_NODE_VERSION=18
 FRONTEND_PORT=${FRONTEND_PORT:-5173}
 BACKEND_PORT=${BACKEND_PORT:-8787}
 DB_URL="https://bible.helloao.org/bible.eng.db"
+GIT_REPO="${GIT_REPO:-https://github.com/nmemmert/nexus-bible.git}"
 INSTALL_DIR="${INSTALL_DIR:-$PWD/nexus-bible}"
 SETUP_SERVICE="${SETUP_SERVICE:-false}"
 
@@ -276,16 +277,15 @@ setup_repository() {
         fi
     else
         print_info "Cloning repository to $INSTALL_DIR..."
+        print_info "Using repository: $GIT_REPO"
         
-        # Check if git repo is set
-        if [ -z "$GIT_REPO" ]; then
-            print_info "No GIT_REPO environment variable set"
-            read -p "Enter GitHub repository URL (or press Enter to skip): " GIT_REPO
-            
-            if [ -z "$GIT_REPO" ]; then
-                print_error "Cannot clone without repository URL"
-                print_info "Please clone manually or set GIT_REPO environment variable"
-                exit 1
+        if [ "$INTERACTIVE" = true ] && [ "${GIT_REPO}" = "https://github.com/nmemmert/nexus-bible.git" ]; then
+            read -p "Use default repository? (y/n or enter custom URL): " repo_choice
+            if [[ ! $repo_choice =~ ^[Yy]?$ ]]; then
+                if [ -n "$repo_choice" ]; then
+                    GIT_REPO="$repo_choice"
+                    print_info "Using custom repository: $GIT_REPO"
+                fi
             fi
         fi
         
@@ -591,13 +591,6 @@ main() {
     check_ports
     install_system_deps
     check_node
-    
-    # Ask about repository
-    if [ ! -d "$INSTALL_DIR" ]; then
-        print_info "\nTo clone from GitHub, set GIT_REPO environment variable:"
-        print_info "  export GIT_REPO=https://github.com/username/nexus-bible.git"
-        print_info "  curl -fsSL <url-to-this-script> | bash\n"
-    fi
     
     setup_repository
     download_database
