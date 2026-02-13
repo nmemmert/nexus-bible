@@ -1,7 +1,5 @@
-// Use relative URL for same-origin requests, or construct based on current host
-const API_BASE_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:8787'
-  : `${window.location.protocol}//${window.location.hostname}:8787`
+// Use /api proxy path for backend requests
+const API_BASE_URL = '/api'
 
 const TOKEN_KEY = 'bsb-token'
 

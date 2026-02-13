@@ -17,6 +17,11 @@ export default defineConfig({
       clientPort: 5173,
     },
     proxy: {
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
       '/bible-api': {
         target: 'https://bible.helloao.org',
         changeOrigin: true,
