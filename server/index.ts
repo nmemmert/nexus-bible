@@ -12,7 +12,23 @@ const BIBLE_DB_PATH = process.env.BSB_BIBLE_DB_PATH ?? './server/data/bible.eng.
 const ALLOWED_ORIGIN = process.env.BSB_ORIGIN ?? 'http://localhost:5173'
 
 const app = express()
-app.use(cors({ origin: ALLOWED_ORIGIN }))
+// Allow CORS from configured origin and any HTTPS origin on port 5173
+app.use(cors({ 
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true)
+    
+    // Allow the configured origin
+    if (origin === ALLOWED_ORIGIN) return callback(null, true)
+    
+    // Allow any origin on port 5173 (development)
+    if (origin.includes(':5173')) return callback(null, true)
+    
+    // Deny all others
+    callback(new Error('Not allowed by CORS'))
+  },
+  credentials: true
+}))
 app.use(express.json())
 
 const db = new Database(DB_PATH)
