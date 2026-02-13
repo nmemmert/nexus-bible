@@ -2282,7 +2282,7 @@ function SearchRoute() {
     try {
       const results = await searchPassages({
         query: query.trim(),
-        translation: translationId || undefined,
+        translation: 'BSB', // Only search BSB translation
         book: bookId || undefined,
         limit: 50,
       })
