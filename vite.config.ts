@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     host: true, // Listen on all network interfaces
     port: 5173,
+    allowedHosts: ['all'], // Allow access from any domain/hostname
     proxy: {
       '/bible-api': {
         target: 'https://bible.helloao.org',
