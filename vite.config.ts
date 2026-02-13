@@ -8,6 +8,11 @@ export default defineConfig({
     host: '0.0.0.0', // Listen on all network interfaces
     port: 5173,
     strictPort: true,
+    allowedHosts: [
+      'nexusbible.necloud.us',
+      'localhost',
+      '.necloud.us', // Allow all necloud.us subdomains
+    ],
     hmr: {
       clientPort: 5173,
     },
