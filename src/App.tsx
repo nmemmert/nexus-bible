@@ -2375,11 +2375,20 @@ function SearchRoute() {
               <li key={`${result.bookId}-${result.chapterNumber}-${result.verseNumber}-${index}`}>
                 <button
                   className="search-hit"
-                  onClick={() =>
+                  onClick={() => {
+                    const books = booksState.data?.books ?? []
+                    const normalizedId = result.bookId.trim().toLowerCase()
+                    const matchedBook = books.find((book) => {
+                      const candidates = [book.id, book.commonName, book.name, book.title]
+                        .filter(Boolean)
+                        .map((value) => String(value).trim().toLowerCase())
+                      return candidates.includes(normalizedId)
+                    })
+                    const targetBookId = matchedBook?.id ?? result.bookId
                     navigate(
-                      `/read/${result.translationId}/${result.bookId}/${result.chapterNumber}?verse=${result.verseNumber}`,
+                      `/read/${result.translationId}/${targetBookId}/${result.chapterNumber}?verse=${result.verseNumber}`,
                     )
-                  }
+                  }}
                 >
                   <strong>
                     {result.translationId} {result.bookId} {result.chapterNumber}:
