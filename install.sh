@@ -404,8 +404,13 @@ setup_systemd_service() {
     print_header "Setting Up Systemd Service"
     
     local service_file="/etc/systemd/system/nexus-bible.service"
+    local npm_path=$(which npm)
+    local current_user=$(whoami)
     
     print_info "Creating systemd service..."
+    print_info "User: $current_user"
+    print_info "Working directory: $INSTALL_DIR"
+    print_info "npm path: $npm_path"
     
     sudo tee "$service_file" > /dev/null << EOF
 [Unit]
@@ -414,10 +419,11 @@ After=network.target
 
 [Service]
 Type=simple
-User=$USER
+User=$current_user
 WorkingDirectory=$INSTALL_DIR
 Environment=NODE_ENV=development
-ExecStart=/usr/bin/npm run dev:full
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=$npm_path run dev:full
 Restart=always
 RestartSec=10
 
@@ -431,8 +437,17 @@ EOF
     print_info "Enabling service..."
     sudo systemctl enable nexus-bible
     
-    print_success "Systemd service created and enabled"
-    print_info "Service will start automatically on boot"
+    print_info "Starting service..."
+    sudo systemctl start nexus-bible
+    
+    sleep 2
+    
+    if sudo systemctl is-active --quiet nexus-bible; then
+        print_success "Systemd service created, enabled, and started successfully"
+        print_info "Service is running and will start automatically on boot"
+    else
+        print_warning "Service created but failed to start. Check logs with: journalctl -u nexus-bible -f"
+    fi
 }
 
 # Install PM2 globally
@@ -520,8 +535,10 @@ print_instructions() {
         echo -e "  ${GREEN}pm2 restart bsb-server${NC}     # Restart"
         echo -e "  ${GREEN}pm2 stop bsb-server${NC}        # Stop\n"
     elif [ "$SETUP_SERVICE" = "systemd" ]; then
-        echo -e "  ${GREEN}sudo systemctl start nexus-bible${NC}    # Start service"
+        echo -e "  ${GREEN}Application is already running!${NC}\n"
+        echo -e "  ${BLUE}Manage the service:${NC}"
         echo -e "  ${GREEN}sudo systemctl status nexus-bible${NC}   # Check status"
+        echo -e "  ${GREEN}sudo systemctl restart nexus-bible${NC}  # Restart service"
         echo -e "  ${GREEN}sudo systemctl stop nexus-bible${NC}     # Stop service"
         echo -e "  ${GREEN}journalctl -u nexus-bible -f${NC}        # View logs\n"
     else
@@ -532,7 +549,14 @@ print_instructions() {
     fi
     
     echo -e "${BLUE}Access the application:${NC}"
-    echo -e "  Frontend: ${GREEN}http://localhost:$FRONTEND_PORT${NC}"
+    echo -e "  Local:    ${GREEN}http://localhost:$FRONTEND_PORT${NC}"
+    
+    # Try to get the server's IP address
+    local server_ip=$(hostname -I | awk '{print $1}')
+    if [ -n "$server_ip" ]; then
+        echo -e "  Network:  ${GREEN}http://$server_ip:$FRONTEND_PORT${NC}"
+    fi
+    
     echo -e "  Backend:  ${GREEN}http://localhost:$BACKEND_PORT${NC}\n"
     
     echo -e "${BLUE}Useful commands:${NC}"
