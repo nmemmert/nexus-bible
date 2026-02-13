@@ -30,7 +30,24 @@ The install script will:
 - ✅ Download the Bible database (~100MB)
 - ✅ Set up environment configuration
 - ✅ Build the application
+- ✅ Check and suggest alternative ports if needed
 - ✅ Optionally configure PM2 or systemd
+
+**Custom Installation Options:**
+
+```bash
+# Custom directory (default: current directory)
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | INSTALL_DIR=/opt/nexus-bible bash
+
+# Custom ports
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | FRONTEND_PORT=3000 BACKEND_PORT=4000 bash
+
+# Auto-setup with PM2
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | SETUP_SERVICE=pm2 bash
+
+# Auto-setup with systemd
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | SETUP_SERVICE=systemd bash
+```
 
 **See [INSTALL.md](INSTALL.md) for detailed options** • **[Installation Guide](INSTALL_SCRIPT_GUIDE.md)**
 

@@ -17,10 +17,10 @@ NC='\033[0m' # No Color
 
 # Configuration
 REQUIRED_NODE_VERSION=18
-FRONTEND_PORT=5173
-BACKEND_PORT=8787
+FRONTEND_PORT=${FRONTEND_PORT:-5173}
+BACKEND_PORT=${BACKEND_PORT:-8787}
 DB_URL="https://bible.helloao.org/bible.eng.db"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/nexus-bible}"
+INSTALL_DIR="${INSTALL_DIR:-$PWD/nexus-bible}"
 SETUP_SERVICE="${SETUP_SERVICE:-false}"
 
 # Check if running non-interactively
@@ -94,32 +94,105 @@ check_port() {
     fi
 }
 
+# Find next available port
+find_available_port() {
+    local start_port=$1
+    local port=$start_port
+    
+    while [ $port -lt 65535 ]; do
+        if check_port $port; then
+            echo $port
+            return 0
+        fi
+        ((port++))
+    done
+    
+    echo "No available port found" >&2
+    return 1
+}
+
 # Check ports
 check_ports() {
     print_header "Checking Required Ports"
     
     local ports_ok=true
+    local suggested_frontend=""
+    local suggested_backend=""
     
     if check_port $FRONTEND_PORT; then
-        print_success "Port $FRONTEND_PORT is available"
+        print_success "Port $FRONTEND_PORT is available for frontend"
     else
         print_error "Port $FRONTEND_PORT is already in use"
+        suggested_frontend=$(find_available_port $FRONTEND_PORT)
+        if [ -n "$suggested_frontend" ]; then
+            print_info "Suggested alternative frontend port: $suggested_frontend"
+        fi
         ports_ok=false
     fi
     
     if check_port $BACKEND_PORT; then
-        print_success "Port $BACKEND_PORT is available"
+        print_success "Port $BACKEND_PORT is available for backend"
     else
         print_error "Port $BACKEND_PORT is already in use"
+        suggested_backend=$(find_available_port $BACKEND_PORT)
+        if [ -n "$suggested_backend" ]; then
+            print_info "Suggested alternative backend port: $suggested_backend"
+        fi
         ports_ok=false
     fi
     
     if [ "$ports_ok" = false ]; then
-        print_warning "Required ports are in use. Stop services using these ports or change configuration."
-        read -p "Continue anyway? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
+        print_warning "Required ports are in use."
+        
+        if [ "$INTERACTIVE" = true ]; then
+            echo -e "${YELLOW}Options:${NC}"
+            echo -e "  1) Stop services using these ports and retry"
+            
+            if [ -n "$suggested_frontend" ] && [ -n "$suggested_backend" ]; then
+                echo -e "  2) Use suggested ports (Frontend: $suggested_frontend, Backend: $suggested_backend)"
+                echo -e "  3) Continue with current ports anyway"
+                echo -e "  4) Exit installation"
+                
+                read -p "Choose [1-4]: " -n 1 -r
+                echo
+                
+                case $REPLY in
+                    1)
+                        print_info "Please stop the services and run the installer again."
+                        exit 1
+                        ;;
+                    2)
+                        FRONTEND_PORT=$suggested_frontend
+                        BACKEND_PORT=$suggested_backend
+                        print_success "Using alternative ports: Frontend=$FRONTEND_PORT, Backend=$BACKEND_PORT"
+                        ;;
+                    3)
+                        print_warning "Continuing with occupied ports - services may fail to start"
+                        ;;
+                    4|*)
+                        print_info "Installation cancelled"
+                        exit 1
+                        ;;
+                esac
+            else
+                echo -e "  2) Continue anyway (services may fail to start)"
+                echo -e "  3) Exit installation"
+                
+                read -p "Choose [1-3]: " -n 1 -r
+                echo
+                
+                case $REPLY in
+                    2)
+                        print_warning "Continuing with occupied ports"
+                        ;;
+                    1|3|*)
+                        print_info "Installation cancelled"
+                        exit 1
+                        ;;
+                esac
+            fi
+        else
+            print_warning "Non-interactive mode: continuing with specified ports (services may fail to start)"
         fi
     fi
 }
@@ -296,7 +369,7 @@ setup_env() {
     
     print_info "Creating .env file..."
     cat > "$env_file" << EOF
-# BSB App Environment Configuration
+# Nexus Bible Environment Configuration
 # Generated on $(date)
 
 # JWT Secret for authentication tokens
@@ -488,6 +561,19 @@ main() {
     print_header "nexus-bible Installation Script"
     
     echo -e "This script will install nexus-bible on your system.\n"
+    
+    # Ask for installation directory in interactive mode
+    if [ "$INTERACTIVE" = true ]; then
+        echo -e "Default installation directory: ${GREEN}$INSTALL_DIR${NC}"
+        read -p "Press Enter to accept, or type a custom path: " custom_dir
+        
+        if [ -n "$custom_dir" ]; then
+            INSTALL_DIR="$custom_dir"
+            print_info "Using custom directory: $INSTALL_DIR"
+        fi
+        echo ""
+    fi
+    
     echo -e "Installation directory: ${GREEN}$INSTALL_DIR${NC}"
     echo -e "Frontend port: ${GREEN}$FRONTEND_PORT${NC}"
     echo -e "Backend port: ${GREEN}$BACKEND_PORT${NC}\n"
