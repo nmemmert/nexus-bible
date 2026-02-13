@@ -23,6 +23,13 @@ DB_URL="https://bible.helloao.org/bible.eng.db"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/nexus-bible}"
 SETUP_SERVICE="${SETUP_SERVICE:-false}"
 
+# Check if running non-interactively
+if [ -t 0 ]; then
+    INTERACTIVE=true
+else
+    INTERACTIVE=false
+fi
+
 # Helper functions
 print_header() {
     echo -e "\n${BLUE}========================================${NC}"
@@ -58,14 +65,21 @@ check_os() {
             print_success "Running on $OS"
         else
             print_warning "This script is designed for Ubuntu/Debian. You're running $OS"
-            read -p "Continue anyway? (y/n) " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                exit 1
+            if [ "$INTERACTIVE" = true ]; then
+                read -p "Continue anyway? (y/n) " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    exit 1
+                fi
+            else
+                print_info "Non-interactive mode: continuing on $OS (some steps may fail)"
             fi
         fi
     else
         print_error "Could not detect OS"
+        exit 1
+    fi
+}
         exit 1
     fi
 }
@@ -478,11 +492,15 @@ main() {
     echo -e "Frontend port: ${GREEN}$FRONTEND_PORT${NC}"
     echo -e "Backend port: ${GREEN}$BACKEND_PORT${NC}\n"
     
-    read -p "Continue with installation? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Installation cancelled"
-        exit 0
+    if [ "$INTERACTIVE" = true ]; then
+        read -p "Continue with installation? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Installation cancelled"
+            exit 0
+        fi
+    else
+        print_info "Running in non-interactive mode, proceeding automatically..."
     fi
     
     # Run installation steps
@@ -501,33 +519,43 @@ main() {
     setup_repository
     download_database
     install_npm_deps
-    setup_env
-    build_app
-    
-    # Ask about process management
-    echo -e "\n${BLUE}How do you want to run the application?${NC}"
-    echo -e "  1) Manual (npm run dev:full)"
-    echo -e "  2) PM2 (recommended for development/small production)"
-    echo -e "  3) Systemd service (recommended for production)"
-    echo -e "  4) Skip for now"
-    
-    read -p "Choose [1-4]: " -n 1 -r
-    echo
-    
-    case $REPLY in
-        2)
-            install_pm2
-            setup_pm2
-            SETUP_SERVICE="pm2"
-            ;;
-        3)
-            setup_systemd_service
-            SETUP_SERVICE="systemd"
-            ;;
-        1|4)
-            SETUP_SERVICE="none"
-            ;;
-        *)
+    if [ "$INTERACTIVE" = true ] && [ "$SETUP_SERVICE" = "false" ]; then
+        echo -e "\n${BLUE}How do you want to run the application?${NC}"
+        echo -e "  1) Manual (npm run dev:full)"
+        echo -e "  2) PM2 (recommended for development/small production)"
+        echo -e "  3) Systemd service (recommended for production)"
+        echo -e "  4) Skip for now"
+        
+        read -p "Choose [1-4]: " -n 1 -r
+        echo
+        
+        case $REPLY in
+            2)
+                install_pm2
+                setup_pm2
+                SETUP_SERVICE="pm2"
+                ;;
+            3)
+                setup_systemd_service
+                SETUP_SERVICE="systemd"
+                ;;
+            1|4)
+                SETUP_SERVICE="none"
+                ;;
+            *)
+                print_warning "Invalid choice, skipping service setup"
+                SETUP_SERVICE="none"
+                ;;
+        esac
+    elif [ "$SETUP_SERVICE" = "pm2" ]; then
+        install_pm2
+        setup_pm2
+    elif [ "$SETUP_SERVICE" = "systemd" ]; then
+        setup_systemd_service
+    else
+        SETUP_SERVICE="none"
+        print_info "Skipping service setup (you can run manually later)"
+    fi*)
             print_warning "Invalid choice, skipping service setup"
             SETUP_SERVICE="none"
             ;;
