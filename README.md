@@ -128,6 +128,8 @@ Copy `.env.example` to `.env` and configure:
 BSB_JWT_SECRET=your-secret-key
 BSB_DB_PATH=./server/data/bsb.sqlite
 BSB_BIBLE_DB_PATH=./server/data/bible.eng.db
+ESV_API_KEY=your-esv-api-key
+API_BIBLE_KEY=your-api-bible-key
 BSB_ORIGIN=http://localhost:5173
 PORT=8787
 ```

@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import cors from 'cors'
 import express from 'express'
 import jwt from 'jsonwebtoken'
@@ -10,6 +11,38 @@ const JWT_SECRET = process.env.BSB_JWT_SECRET ?? 'local-dev-secret'
 const DB_PATH = process.env.BSB_DB_PATH ?? './server/data/bsb.sqlite'
 const BIBLE_DB_PATH = process.env.BSB_BIBLE_DB_PATH ?? './server/data/bible.eng.db'
 const ALLOWED_ORIGIN = process.env.BSB_ORIGIN ?? 'http://localhost:5173'
+const ESV_API_KEY = process.env.ESV_API_KEY
+const ESV_API_BASE_URL = 'https://api.esv.org/v3/passage/text/'
+const API_BIBLE_KEY = process.env.API_BIBLE_KEY
+const API_BIBLE_BASE_URL = 'https://rest.api.bible/v1'
+const API_BIBLE_SUPPORTED_TRANSLATIONS = ['CSB', 'NLT', 'NASB'] as const
+
+const API_BIBLE_TRANSLATION_META: Record<
+  (typeof API_BIBLE_SUPPORTED_TRANSLATIONS)[number],
+  { name: string; englishName: string; shortName: string; website: string; licenseUrl: string }
+> = {
+  CSB: {
+    name: 'Christian Standard Bible',
+    englishName: 'Christian Standard Bible',
+    shortName: 'CSB',
+    website: 'https://www.christianstandardbible.com/',
+    licenseUrl: 'https://www.christianstandardbible.com/',
+  },
+  NLT: {
+    name: 'New Living Translation',
+    englishName: 'New Living Translation',
+    shortName: 'NLT',
+    website: 'https://www.tyndale.com/',
+    licenseUrl: 'https://www.tyndale.com/',
+  },
+  NASB: {
+    name: 'New American Standard Bible',
+    englishName: 'New American Standard Bible',
+    shortName: 'NASB',
+    website: 'https://www.lockman.org/',
+    licenseUrl: 'https://www.lockman.org/',
+  },
+}
 
 const app = express()
 // Allow CORS from configured origin and any HTTPS origin on port 5173
@@ -33,6 +66,310 @@ app.use(express.json())
 
 const db = new Database(DB_PATH)
 const bibleDb = new Database(BIBLE_DB_PATH, { readonly: true })
+
+type EsvBookRow = {
+  id: string
+  name: string
+  commonName: string
+  order: number
+  numberOfChapters: number
+}
+
+function getEsvBooksFromLocalDb(): EsvBookRow[] {
+  const rows = bibleDb
+    .prepare(
+      `SELECT
+         id,
+         COALESCE(MAX(name), id) AS name,
+         COALESCE(MAX(commonName), MAX(name), id) AS commonName,
+         MIN("order") AS "order",
+         MAX(numberOfChapters) AS numberOfChapters
+       FROM Book
+       WHERE COALESCE(isApocryphal, 0) = 0
+       GROUP BY id
+       ORDER BY "order"`,
+    )
+    .all() as EsvBookRow[]
+
+  return rows.filter((row) => row.numberOfChapters > 0)
+}
+
+function parseEsvPassageToVerses(passage: string) {
+  const normalized = passage.replace(/\r/g, '').trim()
+  const withoutHeading = normalized.replace(/^[^\n]*\n+/, '').trim()
+  const verseRegex = /\[(\d+)\]\s*([\s\S]*?)(?=\[(\d+)\]|$)/g
+
+  const verses: Array<{
+    type: 'verse'
+    number: number
+    content: string[]
+  }> = []
+
+  for (const match of withoutHeading.matchAll(verseRegex)) {
+    const number = Number(match[1])
+    const text = (match[2] ?? '').replace(/\s+/g, ' ').trim()
+    if (number > 0 && text) {
+      verses.push({ type: 'verse', number, content: [text] })
+    }
+  }
+
+  if (verses.length > 0) {
+    return verses
+  }
+
+  const fallback = withoutHeading.replace(/\s+/g, ' ').trim()
+  if (!fallback) {
+    return []
+  }
+
+  return [
+    {
+      type: 'verse' as const,
+      number: 1,
+      content: [fallback],
+    },
+  ]
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+}
+
+function stripHtml(value: string) {
+  return decodeHtmlEntities(value.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim()
+}
+
+function parseApiBibleChapterContentToVerses(content: string) {
+  const verseRegex =
+    /<span[^>]*data-number="(\d+)"[^>]*class="[^"]*\bv\b[^"]*"[^>]*>.*?<\/span>([\s\S]*?)(?=<span[^>]*data-number="\d+"[^>]*class="[^"]*\bv\b[^"]*"[^>]*>|$)/g
+
+  const verses: Array<{ type: 'verse'; number: number; content: string[] }> = []
+
+  for (const match of content.matchAll(verseRegex)) {
+    const number = Number(match[1])
+    const text = stripHtml(match[2] ?? '')
+    if (number > 0 && text) {
+      verses.push({
+        type: 'verse',
+        number,
+        content: [text],
+      })
+    }
+  }
+
+  if (verses.length > 0) {
+    return verses
+  }
+
+  const fallback = stripHtml(content)
+  if (!fallback) {
+    return []
+  }
+
+  return [
+    {
+      type: 'verse' as const,
+      number: 1,
+      content: [fallback],
+    },
+  ]
+}
+
+async function apiBibleRequest<T>(path: string, query?: Record<string, string>) {
+  if (!API_BIBLE_KEY) {
+    throw new Error('API.bible is not configured. Set API_BIBLE_KEY on the server.')
+  }
+
+  const params = query ? new URLSearchParams(query) : null
+  const url = `${API_BIBLE_BASE_URL}${path}${params ? `?${params.toString()}` : ''}`
+  const response = await fetch(url, {
+    headers: {
+      'api-key': API_BIBLE_KEY,
+    },
+  })
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '')
+    throw new Error(`API.bible request failed (${response.status}). ${detail}`.trim())
+  }
+
+  return (await response.json()) as T
+}
+
+type ApiBibleBible = {
+  id: string
+  abbreviation?: string
+  abbreviationLocal?: string
+  name: string
+  description?: string
+  language?: { id?: string }
+}
+
+async function resolveApiBibleTextBibleId(translationId: string) {
+  const payload = await apiBibleRequest<{ data: ApiBibleBible[] }>('/bibles')
+
+  const target = translationId.toLowerCase()
+  const byAbbreviation = payload.data.find((bible) => {
+    const abbreviation = (bible.abbreviation ?? '').toLowerCase()
+    const abbreviationLocal = (bible.abbreviationLocal ?? '').toLowerCase()
+    return (
+      abbreviation === target ||
+      abbreviationLocal === target ||
+      abbreviation.startsWith(target) ||
+      abbreviationLocal.startsWith(target) ||
+      abbreviation.includes(target) ||
+      abbreviationLocal.includes(target)
+    )
+  })
+
+  if (byAbbreviation) {
+    return byAbbreviation.id
+  }
+
+  const byName = payload.data.find((bible) => {
+    const blob = `${bible.name ?? ''} ${bible.description ?? ''}`.toLowerCase()
+    return blob.includes(target)
+  })
+
+  return byName?.id ?? null
+}
+
+type ApiBibleBook = {
+  id: string
+  abbreviation?: string
+  name: string
+  nameLong?: string
+}
+
+async function getApiBibleBookIdMap(translationId: string) {
+  const bibleId = await resolveApiBibleTextBibleId(translationId)
+  if (!bibleId) {
+    return { bibleId: null, canonicalToApiBookId: new Map<string, string>() }
+  }
+
+  const payload = await apiBibleRequest<{ data: ApiBibleBook[] }>(`/bibles/${bibleId}/books`)
+  const canonicalBookIds = new Set(getEsvBooksFromLocalDb().map((book) => book.id.toUpperCase()))
+  const canonicalToApiBookId = new Map<string, string>()
+
+  for (const book of payload.data) {
+    const direct = (book.id ?? '').toUpperCase()
+    const abbreviation = (book.abbreviation ?? '').toUpperCase()
+    const candidates = [direct, abbreviation]
+
+    for (const candidate of candidates) {
+      if (candidate && canonicalBookIds.has(candidate) && !canonicalToApiBookId.has(candidate)) {
+        canonicalToApiBookId.set(candidate, book.id)
+        break
+      }
+    }
+  }
+
+  return { bibleId, canonicalToApiBookId }
+}
+
+type ApiBibleChapter = { id: string; number?: string }
+
+async function getApiBibleChapterId(
+  bibleId: string,
+  apiBookId: string,
+  chapterNumber: number,
+) {
+  const payload = await apiBibleRequest<{ data: ApiBibleChapter[] }>(
+    `/bibles/${bibleId}/books/${apiBookId}/chapters`,
+  )
+
+  const exactByNumber = payload.data.find(
+    (chapter) => Number(chapter.number ?? NaN) === chapterNumber,
+  )
+  if (exactByNumber) {
+    return exactByNumber.id
+  }
+
+  const fallbackSuffix = `.${chapterNumber}`
+  const bySuffix = payload.data.find((chapter) => chapter.id.endsWith(fallbackSuffix))
+  return bySuffix?.id ?? null
+}
+
+type ApiBibleVerse = {
+  id?: string
+  orgId?: string
+  reference?: string
+  content?: string
+  number?: string
+}
+
+function inferVerseNumber(verse: ApiBibleVerse, index: number) {
+  const fromNumber = Number(verse.number)
+  if (Number.isInteger(fromNumber) && fromNumber > 0) {
+    return fromNumber
+  }
+
+  if (verse.reference) {
+    const referenceMatch = verse.reference.match(/:(\d+)/)
+    if (referenceMatch) {
+      return Number(referenceMatch[1])
+    }
+  }
+
+  if (verse.orgId) {
+    const orgParts = verse.orgId.split('.')
+    const orgValue = Number(orgParts[orgParts.length - 1])
+    if (Number.isInteger(orgValue) && orgValue > 0) {
+      return orgValue
+    }
+  }
+
+  if (verse.id) {
+    const idParts = verse.id.split('.')
+    const idValue = Number(idParts[idParts.length - 1])
+    if (Number.isInteger(idValue) && idValue > 0) {
+      return idValue
+    }
+  }
+
+  return index + 1
+}
+
+async function getApiBibleAudioLinksForChapter(
+  translationId: string,
+  chapterId: string,
+) {
+  const payload = await apiBibleRequest<{ data: Array<{ id: string; abbreviation?: string; name: string }> }>(
+    '/audio-bibles',
+  )
+
+  const target = translationId.toLowerCase()
+  const candidates = payload.data.filter((audioBible) => {
+    const abbreviation = (audioBible.abbreviation ?? '').toLowerCase()
+    const name = (audioBible.name ?? '').toLowerCase()
+    return abbreviation.includes(target) || name.includes(target)
+  })
+
+  const links: Record<string, string> = {}
+
+  for (const candidate of candidates.slice(0, 5)) {
+    try {
+      const chapterPayload = await apiBibleRequest<{ data?: { resourceUrl?: string; path?: string } }>(
+        `/audio-bibles/${candidate.id}/chapters/${chapterId}`,
+      )
+
+      const resourceUrl = chapterPayload.data?.resourceUrl
+      if (resourceUrl) {
+        links[candidate.abbreviation || candidate.name] = resourceUrl
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return links
+}
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
@@ -88,6 +425,367 @@ CREATE TABLE IF NOT EXISTS plan_items (
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
+})
+
+app.get('/esv/books', (_req, res) => {
+  if (!ESV_API_KEY) {
+    res.status(503).json({ error: 'ESV is not configured. Set ESV_API_KEY on the server.' })
+    return
+  }
+
+  const books = getEsvBooksFromLocalDb().map((book) => ({
+    id: book.id,
+    translationId: 'ESV',
+    name: book.name,
+    commonName: book.commonName,
+    title: null,
+    order: book.order,
+    numberOfChapters: book.numberOfChapters,
+    firstChapterNumber: 1,
+    firstChapterApiLink: `/api/esv/${book.id}/1.json`,
+    lastChapterNumber: book.numberOfChapters,
+    lastChapterApiLink: `/api/esv/${book.id}/${book.numberOfChapters}.json`,
+    totalNumberOfVerses: 0,
+    isApocryphal: false,
+  }))
+
+  res.json({
+    translation: {
+      id: 'ESV',
+      name: 'English Standard Version',
+      englishName: 'English Standard Version',
+      website: 'https://www.esv.org/',
+      licenseUrl: 'https://www.esv.org/',
+      shortName: 'ESV',
+      language: 'eng',
+      languageName: 'English',
+      languageEnglishName: 'English',
+      textDirection: 'ltr',
+      availableFormats: ['json'],
+      listOfBooksApiLink: '/api/esv/books',
+      numberOfBooks: books.length,
+      totalNumberOfChapters: books.reduce((sum, book) => sum + book.numberOfChapters, 0),
+      totalNumberOfVerses: 0,
+    },
+    books,
+  })
+})
+
+app.get('/esv/:bookId/:chapterNumber.json', async (req, res) => {
+  if (!ESV_API_KEY) {
+    res.status(503).json({ error: 'ESV is not configured. Set ESV_API_KEY on the server.' })
+    return
+  }
+
+  const bookId = String(req.params.bookId ?? '').trim().toUpperCase()
+  const chapterNumber = Number(req.params.chapterNumber)
+  if (!bookId || !Number.isInteger(chapterNumber) || chapterNumber < 1) {
+    res.status(400).json({ error: 'Invalid book or chapter.' })
+    return
+  }
+
+  const books = getEsvBooksFromLocalDb()
+  const currentBook = books.find((book) => book.id === bookId)
+  if (!currentBook) {
+    res.status(404).json({ error: `Unknown ESV book id: ${bookId}` })
+    return
+  }
+
+  if (chapterNumber > currentBook.numberOfChapters) {
+    res.status(404).json({ error: `${currentBook.commonName} has only ${currentBook.numberOfChapters} chapters.` })
+    return
+  }
+
+  const query = `${currentBook.commonName} ${chapterNumber}`
+  const params = new URLSearchParams({
+    q: query,
+    'include-footnotes': 'false',
+    'include-footnote-body': 'false',
+    'include-headings': 'true',
+    'include-verse-numbers': 'true',
+    'include-short-copyright': 'false',
+    'include-passage-references': 'true',
+    'include-first-verse-numbers': 'false',
+    'line-length': '0',
+  })
+
+  try {
+    const response = await fetch(`${ESV_API_BASE_URL}?${params.toString()}`, {
+      headers: {
+        Authorization: `Token ${ESV_API_KEY}`,
+      },
+    })
+
+    if (!response.ok) {
+      const payload = await response.text().catch(() => '')
+      res.status(502).json({ error: `ESV request failed (${response.status}). ${payload}`.trim() })
+      return
+    }
+
+    const payload = (await response.json()) as {
+      passages?: string[]
+      query?: string
+      canonical?: string
+    }
+
+    const passage = payload.passages?.[0]
+    if (!passage) {
+      res.status(404).json({ error: `No ESV passage found for ${query}.` })
+      return
+    }
+
+    const verses = parseEsvPassageToVerses(passage)
+    const currentBookIndex = books.findIndex((book) => book.id === currentBook.id)
+    const previousChapterApiLink =
+      chapterNumber > 1
+        ? `/api/esv/${currentBook.id}/${chapterNumber - 1}.json`
+        : currentBookIndex > 0
+          ? `/api/esv/${books[currentBookIndex - 1].id}/${books[currentBookIndex - 1].numberOfChapters}.json`
+          : null
+
+    const nextChapterApiLink =
+      chapterNumber < currentBook.numberOfChapters
+        ? `/api/esv/${currentBook.id}/${chapterNumber + 1}.json`
+        : currentBookIndex < books.length - 1
+          ? `/api/esv/${books[currentBookIndex + 1].id}/1.json`
+          : null
+
+    res.json({
+      translation: {
+        id: 'ESV',
+        name: 'English Standard Version',
+        englishName: 'English Standard Version',
+        website: 'https://www.esv.org/',
+        licenseUrl: 'https://www.esv.org/',
+        shortName: 'ESV',
+        language: 'eng',
+        languageName: 'English',
+        languageEnglishName: 'English',
+        textDirection: 'ltr',
+        availableFormats: ['json'],
+        listOfBooksApiLink: '/api/esv/books',
+        numberOfBooks: books.length,
+        totalNumberOfChapters: 1189,
+        totalNumberOfVerses: 31102,
+      },
+      book: {
+        id: currentBook.id,
+        translationId: 'ESV',
+        name: currentBook.name,
+        commonName: currentBook.commonName,
+        title: null,
+        order: currentBook.order,
+        numberOfChapters: currentBook.numberOfChapters,
+        firstChapterNumber: 1,
+        firstChapterApiLink: `/api/esv/${currentBook.id}/1.json`,
+        lastChapterNumber: currentBook.numberOfChapters,
+        lastChapterApiLink: `/api/esv/${currentBook.id}/${currentBook.numberOfChapters}.json`,
+        totalNumberOfVerses: 0,
+        isApocryphal: false,
+      },
+      thisChapterLink: `/api/esv/${currentBook.id}/${chapterNumber}.json`,
+      thisChapterAudioLinks: {},
+      nextChapterApiLink,
+      nextChapterAudioLinks: null,
+      previousChapterApiLink,
+      previousChapterAudioLinks: null,
+      numberOfVerses: verses.length,
+      chapter: {
+        number: chapterNumber,
+        content: verses,
+        footnotes: [],
+      },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    res.status(502).json({ error: `Failed to load ESV passage: ${message}` })
+  }
+})
+
+app.get('/apibible/:translationId/books', async (req, res) => {
+  const translationId = String(req.params.translationId ?? '').trim().toUpperCase()
+
+  if (!API_BIBLE_SUPPORTED_TRANSLATIONS.includes(translationId as 'CSB' | 'NLT' | 'NASB')) {
+    res.status(404).json({ error: `Unsupported API.bible translation: ${translationId}` })
+    return
+  }
+
+  try {
+    const { bibleId, canonicalToApiBookId } = await getApiBibleBookIdMap(translationId)
+    if (!bibleId) {
+      res.status(404).json({ error: `${translationId} is not available in your API.bible account.` })
+      return
+    }
+
+    const canonicalBooks = getEsvBooksFromLocalDb().filter((book) =>
+      canonicalToApiBookId.has(book.id.toUpperCase()),
+    )
+
+    const books = canonicalBooks.map((book) => ({
+      id: book.id,
+      translationId,
+      name: book.name,
+      commonName: book.commonName,
+      title: null,
+      order: book.order,
+      numberOfChapters: book.numberOfChapters,
+      firstChapterNumber: 1,
+      firstChapterApiLink: `/api/apibible/${translationId}/${book.id}/1.json`,
+      lastChapterNumber: book.numberOfChapters,
+      lastChapterApiLink: `/api/apibible/${translationId}/${book.id}/${book.numberOfChapters}.json`,
+      totalNumberOfVerses: 0,
+      isApocryphal: false,
+    }))
+
+    const meta = API_BIBLE_TRANSLATION_META[translationId as 'CSB' | 'NLT' | 'NASB']
+    res.json({
+      translation: {
+        id: translationId,
+        name: meta.name,
+        englishName: meta.englishName,
+        website: meta.website,
+        licenseUrl: meta.licenseUrl,
+        licenseNotes: 'Provided via API.bible access',
+        shortName: meta.shortName,
+        language: 'eng',
+        languageName: 'English',
+        languageEnglishName: 'English',
+        textDirection: 'ltr',
+        availableFormats: ['json'],
+        listOfBooksApiLink: `/api/apibible/${translationId}/books`,
+        numberOfBooks: books.length,
+        totalNumberOfChapters: books.reduce((sum, book) => sum + book.numberOfChapters, 0),
+        totalNumberOfVerses: 0,
+      },
+      books,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    res.status(502).json({ error: `Failed to load API.bible books: ${message}` })
+  }
+})
+
+app.get('/apibible/:translationId/:bookId/:chapterNumber.json', async (req, res) => {
+  const translationId = String(req.params.translationId ?? '').trim().toUpperCase()
+  const bookId = String(req.params.bookId ?? '').trim().toUpperCase()
+  const chapterNumber = Number(req.params.chapterNumber)
+
+  if (!API_BIBLE_SUPPORTED_TRANSLATIONS.includes(translationId as 'CSB' | 'NLT' | 'NASB')) {
+    res.status(404).json({ error: `Unsupported API.bible translation: ${translationId}` })
+    return
+  }
+
+  if (!bookId || !Number.isInteger(chapterNumber) || chapterNumber < 1) {
+    res.status(400).json({ error: 'Invalid book or chapter.' })
+    return
+  }
+
+  try {
+    const canonicalBooks = getEsvBooksFromLocalDb()
+    const currentBook = canonicalBooks.find((book) => book.id === bookId)
+    if (!currentBook) {
+      res.status(404).json({ error: `Unknown book id: ${bookId}` })
+      return
+    }
+
+    if (chapterNumber > currentBook.numberOfChapters) {
+      res.status(404).json({ error: `${currentBook.commonName} has only ${currentBook.numberOfChapters} chapters.` })
+      return
+    }
+
+    const { bibleId, canonicalToApiBookId } = await getApiBibleBookIdMap(translationId)
+    if (!bibleId) {
+      res.status(404).json({ error: `${translationId} is not available in your API.bible account.` })
+      return
+    }
+
+    const apiBookId = canonicalToApiBookId.get(bookId)
+    if (!apiBookId) {
+      res.status(404).json({ error: `${translationId} does not expose book ${bookId}.` })
+      return
+    }
+
+    const chapterId = await getApiBibleChapterId(bibleId, apiBookId, chapterNumber)
+    if (!chapterId) {
+      res.status(404).json({ error: `Could not resolve chapter ${bookId} ${chapterNumber} for ${translationId}.` })
+      return
+    }
+
+    const chapterPayload = await apiBibleRequest<{ data?: { content?: string } }>(
+      `/bibles/${bibleId}/chapters/${chapterId}`,
+    )
+
+    const verses = parseApiBibleChapterContentToVerses(chapterPayload.data?.content ?? '')
+
+    const currentBookIndex = canonicalBooks.findIndex((book) => book.id === currentBook.id)
+    const previousChapterApiLink =
+      chapterNumber > 1
+        ? `/api/apibible/${translationId}/${currentBook.id}/${chapterNumber - 1}.json`
+        : currentBookIndex > 0
+          ? `/api/apibible/${translationId}/${canonicalBooks[currentBookIndex - 1].id}/${canonicalBooks[currentBookIndex - 1].numberOfChapters}.json`
+          : null
+
+    const nextChapterApiLink =
+      chapterNumber < currentBook.numberOfChapters
+        ? `/api/apibible/${translationId}/${currentBook.id}/${chapterNumber + 1}.json`
+        : currentBookIndex < canonicalBooks.length - 1
+          ? `/api/apibible/${translationId}/${canonicalBooks[currentBookIndex + 1].id}/1.json`
+          : null
+
+    const thisChapterAudioLinks = await getApiBibleAudioLinksForChapter(translationId, chapterId)
+    const meta = API_BIBLE_TRANSLATION_META[translationId as 'CSB' | 'NLT' | 'NASB']
+
+    res.json({
+      translation: {
+        id: translationId,
+        name: meta.name,
+        englishName: meta.englishName,
+        website: meta.website,
+        licenseUrl: meta.licenseUrl,
+        licenseNotes: 'Provided via API.bible access',
+        shortName: meta.shortName,
+        language: 'eng',
+        languageName: 'English',
+        languageEnglishName: 'English',
+        textDirection: 'ltr',
+        availableFormats: ['json'],
+        listOfBooksApiLink: `/api/apibible/${translationId}/books`,
+        numberOfBooks: 66,
+        totalNumberOfChapters: 1189,
+        totalNumberOfVerses: 31102,
+      },
+      book: {
+        id: currentBook.id,
+        translationId,
+        name: currentBook.name,
+        commonName: currentBook.commonName,
+        title: null,
+        order: currentBook.order,
+        numberOfChapters: currentBook.numberOfChapters,
+        firstChapterNumber: 1,
+        firstChapterApiLink: `/api/apibible/${translationId}/${currentBook.id}/1.json`,
+        lastChapterNumber: currentBook.numberOfChapters,
+        lastChapterApiLink: `/api/apibible/${translationId}/${currentBook.id}/${currentBook.numberOfChapters}.json`,
+        totalNumberOfVerses: 0,
+        isApocryphal: false,
+      },
+      thisChapterLink: `/api/apibible/${translationId}/${currentBook.id}/${chapterNumber}.json`,
+      thisChapterAudioLinks,
+      nextChapterApiLink,
+      nextChapterAudioLinks: null,
+      previousChapterApiLink,
+      previousChapterAudioLinks: null,
+      numberOfVerses: verses.length,
+      chapter: {
+        number: chapterNumber,
+        content: verses,
+        footnotes: [],
+      },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    res.status(502).json({ error: `Failed to load API.bible chapter: ${message}` })
+  }
 })
 
 function createToken(userId: string) {

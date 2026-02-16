@@ -127,49 +127,93 @@ const saveBookmarks = (bookmarks: BookmarkEntry[]) => {
   }
 }
 
-const PRIORITY_LANGUAGES = [
-  { priority: 0, matchers: ['english', 'en', 'eng'] },
-  { priority: 1, matchers: ['hebrew', 'he', 'heb', 'hbo'] },
-  { priority: 2, matchers: ['greek', 'el', 'ell', 'grc', 'gre'] },
-]
+const ALLOWED_TRANSLATION_LANGUAGE_CODES = new Set([
+  'eng',
+  'heb',
+  'hbo',
+  'grc',
+  'el',
+  'ell',
+  'gre',
+])
 
-const getLanguagePriority = (translation: Translation) => {
-  const candidates = [
-    translation.languageEnglishName,
-    translation.languageName,
-    translation.language,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .map((value) => value.toLowerCase())
+const ALLOWED_TRANSLATION_LANGUAGE_NAMES = new Set([
+  'english',
+  'hebrew',
+  'ancient hebrew',
+  'greek',
+  'ancient greek',
+])
 
-  for (const candidate of candidates) {
-    const hit = PRIORITY_LANGUAGES.find((entry) =>
-      entry.matchers.some((matcher) =>
-        candidate === matcher || candidate.includes(matcher),
-      ),
-    )
-    if (hit) {
-      return hit.priority
-    }
-  }
+const isAllowedTranslationLanguage = (translation: Translation) => {
+  const languageCode = (translation.language ?? '').trim().toLowerCase()
+  const languageName = (translation.languageName ?? '').trim().toLowerCase()
+  const languageEnglishName =
+    (translation.languageEnglishName ?? '').trim().toLowerCase()
 
-  return PRIORITY_LANGUAGES.length
+  return (
+    ALLOWED_TRANSLATION_LANGUAGE_CODES.has(languageCode) ||
+    ALLOWED_TRANSLATION_LANGUAGE_NAMES.has(languageName) ||
+    ALLOWED_TRANSLATION_LANGUAGE_NAMES.has(languageEnglishName)
+  )
 }
 
 const prioritizeTranslations = (translations: Translation[]) =>
   translations
-    .map((translation, index) => ({
-      translation,
-      index,
-      priority: getLanguagePriority(translation),
-    }))
+    .filter(isAllowedTranslationLanguage)
     .sort((a, b) => {
-      if (a.priority !== b.priority) {
-        return a.priority - b.priority
-      }
-      return a.index - b.index
+      const left = (a.englishName || a.name || a.shortName || a.id).toLowerCase()
+      const right = (b.englishName || b.name || b.shortName || b.id).toLowerCase()
+      return left.localeCompare(right)
     })
-    .map((entry) => entry.translation)
+
+type SelectorOption = { value: string; label: string }
+type SelectorOptionGroup = { label: string; options: SelectorOption[] }
+
+const getTranslationLanguageGroup = (translation: Translation) => {
+  const languageCode = (translation.language ?? '').trim().toLowerCase()
+  const languageName = (translation.languageName ?? '').trim().toLowerCase()
+  const languageEnglishName =
+    (translation.languageEnglishName ?? '').trim().toLowerCase()
+
+  const combined = `${languageCode} ${languageName} ${languageEnglishName}`
+
+  if (combined.includes('greek') || ['grc', 'el', 'ell', 'gre'].includes(languageCode)) {
+    return 'Greek'
+  }
+
+  if (combined.includes('hebrew') || ['heb', 'hbo'].includes(languageCode)) {
+    return 'Hebrew'
+  }
+
+  return 'English'
+}
+
+const buildGroupedTranslationOptions = (
+  translations: Translation[],
+  labelBuilder: (translation: Translation) => string,
+): SelectorOptionGroup[] => {
+  const grouped = new Map<string, SelectorOption[]>()
+
+  for (const translation of translations) {
+    const group = getTranslationLanguageGroup(translation)
+    const existing = grouped.get(group) ?? []
+    existing.push({
+      value: translation.id,
+      label: labelBuilder(translation),
+    })
+    grouped.set(group, existing)
+  }
+
+  return ['English', 'Hebrew', 'Greek']
+    .map((group) => ({
+      label: group,
+      options: (grouped.get(group) ?? []).sort((a, b) =>
+        a.label.toLowerCase().localeCompare(b.label.toLowerCase()),
+      ),
+    }))
+    .filter((group) => group.options.length > 0)
+}
 
 const PLAN_SETS = [
   {
@@ -1041,12 +1085,10 @@ function ReaderRoute() {
           label="Translation"
           value={translationId}
           onChange={setTranslationId}
-          options={
-            orderedTranslations.map((translation) => ({
-              value: translation.id,
-              label: `${translation.shortName} - ${translation.englishName}`,
-            })) ?? []
-          }
+          options={buildGroupedTranslationOptions(
+            orderedTranslations,
+            (translation) => `${translation.shortName} - ${translation.englishName}`,
+          )}
           loading={translationsState.loading}
         />
         <Selector
@@ -1375,12 +1417,10 @@ function LibraryRoute() {
           label="Translation"
           value={translationId}
           onChange={setTranslationId}
-          options={
-            orderedTranslations.map((translation) => ({
-              value: translation.id,
-              label: `${translation.shortName} - ${translation.englishName}`,
-            })) ?? []
-          }
+          options={buildGroupedTranslationOptions(
+            orderedTranslations,
+            (translation) => `${translation.shortName} - ${translation.englishName}`,
+          )}
           loading={translationsState.loading}
         />
       </div>
@@ -2325,10 +2365,10 @@ function SearchRoute() {
           options={
             [
               { value: '', label: 'All translations' },
-              ...orderedTranslations.map((translation) => ({
-                value: translation.id,
-                label: `${translation.shortName} - ${translation.englishName}`,
-              })),
+              ...buildGroupedTranslationOptions(
+                orderedTranslations,
+                (translation) => `${translation.shortName} - ${translation.englishName}`,
+              ),
             ]
           }
           loading={translationsState.loading}
@@ -2559,7 +2599,7 @@ function CompareToolRoute() {
     [translationsState.data],
   )
   const [translationId, setTranslationId] = useState(DEFAULT_TRANSLATION)
-  const [compareTranslationId, setCompareTranslationId] = useState('ESV')
+  const [compareTranslationId, setCompareTranslationId] = useState(DEFAULT_TRANSLATION)
   const [bookId, setBookId] = useState(DEFAULT_BOOK)
   const [chapterNumber, setChapterNumber] = useState(1)
 
@@ -2625,24 +2665,20 @@ function CompareToolRoute() {
             label="Primary"
             value={translationId}
             onChange={setTranslationId}
-            options={
-              orderedTranslations.map((t) => ({
-                value: t.id,
-                label: t.shortName,
-              })) ?? []
-            }
+            options={buildGroupedTranslationOptions(
+              orderedTranslations,
+              (t) => t.shortName,
+            )}
             loading={translationsState.loading}
           />
           <Selector
             label="Compare"
             value={compareTranslationId}
             onChange={setCompareTranslationId}
-            options={
-              orderedTranslations.map((t) => ({
-                value: t.id,
-                label: t.shortName,
-              })) ?? []
-            }
+            options={buildGroupedTranslationOptions(
+              orderedTranslations,
+              (t) => t.shortName,
+            )}
             loading={translationsState.loading}
           />
         </div>
@@ -2785,12 +2821,10 @@ function WordStudyRoute() {
             label="Translation"
             value={translationId}
             onChange={setTranslationId}
-            options={
-              orderedTranslations.map((t) => ({
-                value: t.id,
-                label: t.shortName,
-              })) ?? []
-            }
+            options={buildGroupedTranslationOptions(
+              orderedTranslations,
+              (t) => t.shortName,
+            )}
             loading={translationsState.loading}
           />
           <Selector
@@ -3100,7 +3134,7 @@ function Selector({
   label: string
   value: string
   onChange: (value: string) => void
-  options: Array<{ value: string; label: string }>
+  options: Array<SelectorOption | SelectorOptionGroup>
   loading?: boolean
 }) {
   return (
@@ -3112,11 +3146,25 @@ function Selector({
         disabled={loading}
       >
         {options.length === 0 && <option value="">Loading...</option>}
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
+        {options.map((option) => {
+          if ('options' in option) {
+            return (
+              <optgroup key={option.label} label={option.label}>
+                {option.options.map((groupedOption) => (
+                  <option key={groupedOption.value} value={groupedOption.value}>
+                    {groupedOption.label}
+                  </option>
+                ))}
+              </optgroup>
+            )
+          }
+
+          return (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          )
+        })}
       </select>
     </label>
   )

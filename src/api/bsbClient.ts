@@ -2,6 +2,97 @@ const API_BASE_URL = import.meta.env.DEV
   ? '/bible-api'
   : 'https://bible.helloao.org'
 
+const LOCAL_API_BASE_URL = '/api'
+
+const ESV_TRANSLATION: Translation = {
+  id: 'ESV',
+  name: 'English Standard Version',
+  englishName: 'English Standard Version',
+  website: 'https://www.esv.org/',
+  licenseUrl: 'https://www.esv.org/',
+  licenseNotes: 'Provided via ESV API key',
+  shortName: 'ESV',
+  language: 'eng',
+  languageName: 'English',
+  languageEnglishName: 'English',
+  textDirection: 'ltr',
+  availableFormats: ['json'],
+  listOfBooksApiLink: '/api/esv/books',
+  numberOfBooks: 66,
+  totalNumberOfChapters: 1189,
+  totalNumberOfVerses: 31102,
+}
+
+const API_BIBLE_TRANSLATIONS: Translation[] = [
+  {
+    id: 'CSB',
+    name: 'Christian Standard Bible',
+    englishName: 'Christian Standard Bible',
+    website: 'https://www.christianstandardbible.com/',
+    licenseUrl: 'https://www.christianstandardbible.com/',
+    licenseNotes: 'Provided via API.bible access',
+    shortName: 'CSB',
+    language: 'eng',
+    languageName: 'English',
+    languageEnglishName: 'English',
+    textDirection: 'ltr',
+    availableFormats: ['json'],
+    listOfBooksApiLink: '/api/apibible/CSB/books',
+    numberOfBooks: 66,
+    totalNumberOfChapters: 1189,
+    totalNumberOfVerses: 31102,
+  },
+  {
+    id: 'NLT',
+    name: 'New Living Translation',
+    englishName: 'New Living Translation',
+    website: 'https://www.tyndale.com/',
+    licenseUrl: 'https://www.tyndale.com/',
+    licenseNotes: 'Provided via API.bible access',
+    shortName: 'NLT',
+    language: 'eng',
+    languageName: 'English',
+    languageEnglishName: 'English',
+    textDirection: 'ltr',
+    availableFormats: ['json'],
+    listOfBooksApiLink: '/api/apibible/NLT/books',
+    numberOfBooks: 66,
+    totalNumberOfChapters: 1189,
+    totalNumberOfVerses: 31102,
+  },
+  {
+    id: 'NASB',
+    name: 'New American Standard Bible',
+    englishName: 'New American Standard Bible',
+    website: 'https://www.lockman.org/',
+    licenseUrl: 'https://www.lockman.org/',
+    licenseNotes: 'Provided via API.bible access',
+    shortName: 'NASB',
+    language: 'eng',
+    languageName: 'English',
+    languageEnglishName: 'English',
+    textDirection: 'ltr',
+    availableFormats: ['json'],
+    listOfBooksApiLink: '/api/apibible/NASB/books',
+    numberOfBooks: 66,
+    totalNumberOfChapters: 1189,
+    totalNumberOfVerses: 31102,
+  },
+]
+
+const LOCAL_PROVIDER_TRANSLATION_IDS = new Set([
+  ESV_TRANSLATION.id,
+  ...API_BIBLE_TRANSLATIONS.map((translation) => translation.id),
+])
+
+function mergePreferredTranslations(
+  base: Translation[],
+  preferred: Translation[],
+): Translation[] {
+  const existing = new Set(base.map((translation) => translation.id))
+  return [...base, ...preferred.filter((translation) => !existing.has(translation.id))]
+}
+
 type JsonValue =
   | string
   | number
@@ -310,12 +401,33 @@ export type DatasetBookChapter = {
 }
 
 export async function getAvailableTranslations(): Promise<AvailableTranslations> {
-  return fetchJson<AvailableTranslations>('/api/available_translations.json')
+  const available = await fetchJson<AvailableTranslations>('/api/available_translations.json')
+  return {
+    translations: mergePreferredTranslations(available.translations, [
+      ESV_TRANSLATION,
+      ...API_BIBLE_TRANSLATIONS,
+    ]),
+  }
 }
 
 export async function getBooksForTranslation(
   translationId: string,
 ): Promise<TranslationBooks> {
+  if (LOCAL_PROVIDER_TRANSLATION_IDS.has(translationId)) {
+    const endpoint =
+      translationId === ESV_TRANSLATION.id
+        ? `${LOCAL_API_BASE_URL}/esv/books`
+        : `${LOCAL_API_BASE_URL}/apibible/${translationId}/books`
+
+    const response = await fetch(endpoint)
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      const message = payload?.error ?? `Request failed: ${response.status}`
+      throw new Error(message)
+    }
+    return (await response.json()) as TranslationBooks
+  }
+
   return fetchJson<TranslationBooks>(`/api/${translationId}/books.json`)
 }
 
@@ -324,6 +436,21 @@ export async function getChapter(
   bookId: string,
   chapterNumber: number,
 ): Promise<TranslationBookChapter> {
+  if (LOCAL_PROVIDER_TRANSLATION_IDS.has(translationId)) {
+    const endpoint =
+      translationId === ESV_TRANSLATION.id
+        ? `${LOCAL_API_BASE_URL}/esv/${bookId}/${chapterNumber}.json`
+        : `${LOCAL_API_BASE_URL}/apibible/${translationId}/${bookId}/${chapterNumber}.json`
+
+    const response = await fetch(endpoint)
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      const message = payload?.error ?? `Request failed: ${response.status}`
+      throw new Error(message)
+    }
+    return (await response.json()) as TranslationBookChapter
+  }
+
   return fetchJson<TranslationBookChapter>(
     `/api/${translationId}/${bookId}/${chapterNumber}.json`,
   )
