@@ -11,9 +11,9 @@ const JWT_SECRET = process.env.BSB_JWT_SECRET ?? 'local-dev-secret'
 const DB_PATH = process.env.BSB_DB_PATH ?? './server/data/bsb.sqlite'
 const BIBLE_DB_PATH = process.env.BSB_BIBLE_DB_PATH ?? './server/data/bible.eng.db'
 const ALLOWED_ORIGIN = process.env.BSB_ORIGIN ?? 'http://localhost:5173'
-const ESV_API_KEY = process.env.ESV_API_KEY
+const ESV_API_KEY = process.env.ESV_API_KEY?.trim()
 const ESV_API_BASE_URL = 'https://api.esv.org/v3/passage/text/'
-const API_BIBLE_KEY = process.env.API_BIBLE_KEY
+const API_BIBLE_KEY = process.env.API_BIBLE_KEY?.trim()
 const API_BIBLE_BASE_URL = 'https://rest.api.bible/v1'
 const API_BIBLE_SUPPORTED_TRANSLATIONS = ['CSB', 'NLT', 'NASB'] as const
 
