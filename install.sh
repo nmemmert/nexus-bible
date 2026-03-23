@@ -23,6 +23,7 @@ DB_URL="https://bible.helloao.org/bible.eng.db"
 GIT_REPO="${GIT_REPO:-https://github.com/nmemmert/nexus-bible.git}"
 INSTALL_DIR="${INSTALL_DIR:-$PWD/nexus-bible}"
 SETUP_SERVICE="${SETUP_SERVICE:-false}"
+PKG_MANAGER=""
 
 # Check if running non-interactively
 if [ -t 0 ]; then
@@ -54,28 +55,38 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
-# Check if running on Ubuntu/Debian
+# Check if running on supported Linux distro
 check_os() {
     print_header "Checking Operating System"
     
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        OS=$NAME
-        
-        if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]]; then
-            print_success "Running on $OS"
-        else
-            print_warning "This script is designed for Ubuntu/Debian. You're running $OS"
-            if [ "$INTERACTIVE" = true ]; then
-                read -p "Continue anyway? (y/n) " -n 1 -r
-                echo
-                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                    exit 1
+        OS="$NAME"
+        ID_LC=$(echo "$ID" | tr '[:upper:]' '[:lower:]')
+
+        case "$ID_LC" in
+            ubuntu|debian|linuxmint)
+                PKG_MANAGER="apt"
+                print_success "Running on $OS (Debian/Ubuntu family)"
+                ;;
+            rocky|centos|rhel|fedora|alma|amazon)
+                PKG_MANAGER="dnf"
+                print_success "Running on $OS (RHEL/Fedora family)"
+                ;;
+            *)
+                print_warning "This script is designed for Debian/Ubuntu or RHEL/Fedora families. You're running $OS ($ID)"
+                if [ "$INTERACTIVE" = true ]; then
+                    read -p "Continue anyway? (y/n) " -n 1 -r
+                    echo
+                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                        exit 1
+                    fi
+                else
+                    print_info "Non-interactive mode: continuing on $OS (some steps may fail)"
+                    # leave PKG_MANAGER blank to catch unsupported path later
                 fi
-            else
-                print_info "Non-interactive mode: continuing on $OS (some steps may fail)"
-            fi
-        fi
+                ;;
+        esac
     else
         print_error "Could not detect OS"
         exit 1
@@ -227,13 +238,26 @@ check_node() {
 # Install Node.js
 install_node() {
     print_header "Installing Node.js"
-    
-    print_info "Adding NodeSource repository..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    
-    print_info "Installing Node.js..."
-    sudo apt-get install -y nodejs
-    
+
+    if [ "${PKG_MANAGER}" = "apt" ]; then
+        print_info "Adding NodeSource repository for Debian/Ubuntu..."
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+
+        print_info "Installing Node.js..."
+        sudo apt-get install -y nodejs
+
+    elif [ "${PKG_MANAGER}" = "dnf" ]; then
+        print_info "Adding NodeSource repository for RHEL/Fedora..."
+        curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+
+        print_info "Installing Node.js..."
+        sudo dnf install -y nodejs
+
+    else
+        print_error "Unsupported package manager: $PKG_MANAGER. Cannot install Node.js automatically."
+        exit 1
+    fi
+
     print_success "Node.js installed: $(node -v)"
     print_success "npm installed: $(npm -v)"
 }
@@ -241,21 +265,40 @@ install_node() {
 # Install system dependencies
 install_system_deps() {
     print_header "Installing System Dependencies"
-    
-    print_info "Updating package list..."
-    sudo apt-get update -qq
-    
-    print_info "Installing required packages..."
-    sudo apt-get install -y \
-        curl \
-        wget \
-        git \
-        build-essential \
-        python3 \
-        netstat-nat \
-        net-tools \
-        sqlite3
-    
+
+    if [ "${PKG_MANAGER}" = "apt" ]; then
+        print_info "Updating package list..."
+        sudo apt-get update -qq
+
+        print_info "Installing required packages..."
+        sudo apt-get install -y \
+            curl \
+            wget \
+            git \
+            build-essential \
+            python3 \
+            net-tools \
+            sqlite3
+
+    elif [ "${PKG_MANAGER}" = "dnf" ]; then
+        print_info "Refreshing package cache..."
+        sudo dnf makecache -q
+
+        print_info "Installing required packages..."
+        sudo dnf groupinstall -y "Development Tools"
+        sudo dnf install -y \
+            curl \
+            wget \
+            git \
+            python3 \
+            net-tools \
+            sqlite
+
+    else
+        print_error "Unsupported package manager: $PKG_MANAGER. Cannot install system dependencies automatically."
+        exit 1
+    fi
+
     print_success "System dependencies installed"
 }
 

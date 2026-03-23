@@ -139,7 +139,7 @@ pm2 restart bsb-server  # or systemctl restart
 
 ## Requirements
 
-- Ubuntu 20.04+ or Debian 11+ (may work on other Linux distros)
+- Ubuntu 20.04+ or Debian 11+ or Rocky Linux/CentOS/RHEL 8+ (DNF-based) (may work on other Linux distros)
 - 2GB RAM minimum
 - 500MB disk space minimum
 - Internet connection for installation
