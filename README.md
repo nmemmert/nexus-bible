@@ -17,12 +17,18 @@ A modern Bible study application for the BSB (Berean Standard Bible) translation
 
 ## Quick Start
 
-### One-Line Install (Ubuntu/Debian)
+### One-Line Install (Ubuntu/Debian/Rocky Linux)
 
 Install everything automatically:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/main/install.sh | bash
+```
+
+For Rocky Linux/CentOS/RHEL, make sure the script is the updated version (with DNF support) to avoid `apt-get` errors:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nmemmert/nexus-bible/2e11083/install.sh | bash
 ```
 
 The install script will:
